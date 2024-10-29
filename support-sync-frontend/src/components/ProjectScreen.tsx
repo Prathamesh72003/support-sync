@@ -50,7 +50,7 @@ export default function ProjectScreen() {
         const fetchedIssues = response.data.open_tickets || response.data.open_tasks;
         const issuesWithProjectKey = fetchedIssues.map((issue: Issue) => ({
           ...issue,
-          projectKey: projectKey, 
+          projectKey: projectKey,
         }));
 
         setIssues(issuesWithProjectKey);
@@ -73,8 +73,8 @@ export default function ProjectScreen() {
     <div className="min-h-screen bg-gradient-to-br from-[#001f3f] via-[#00172e] to-[#001030] text-white">
       <NavBar />
 
-      <div className="max-w-7xl mx-auto">
-        <h1 className="text-3xl font-bold mb-16">{`${platform}/${projectKey}`}</h1>
+      <div className="max-w-7xl mx-auto pt-16">
+        <h1 className="text-3xl font-bold mb-10 mt-10">{`${platform}/${projectKey}`}</h1>
         <ScrollArea className="h-[calc(100vh-12rem)]">
           {loading ? (
             <div className="flex justify-center items-center h-full">
