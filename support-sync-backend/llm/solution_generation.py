@@ -1,3 +1,8 @@
+import os
+import sys
+
+sys.path.append(os.path.abspath(os.path.join(os.path.dirname(__file__), '..')))
+
 from fetcher.jira_fetcher import fetch_closed_tickets
 from fetcher.embedder import embed_ticket_content
 from fetcher.vector_store import store_ticket_embedding, fetch_stored_tickets  
@@ -29,3 +34,6 @@ def update_vector_database_with_closed_tickets(project_key):
             print(f"Stored new resolved ticket: {ticket['Issue Key']}")  
         else:
             print(f"Ticket {ticket['Issue Key']} already stored.")
+
+
+# update_vector_database_with_closed_tickets("KAN")

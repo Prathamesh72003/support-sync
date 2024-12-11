@@ -66,7 +66,7 @@ def chatbot_response(ticket_context, user_query, pdf_context):
 
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="llama-3.2-90b-text-preview",  
+        model="llama-3.2-3b-preview",  
         max_tokens=700  
     )
 
@@ -106,7 +106,7 @@ def get_openai_solution(ticket, similar_ticket_solutions):
 
     response = client.chat.completions.create(
         messages=[{"role": "user", "content": prompt}],
-        model="llama-3.2-90b-text-preview",
+        model="llama-3.2-3b-preview",
     )
     
     return response.choices[0].message.content

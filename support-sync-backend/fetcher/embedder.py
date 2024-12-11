@@ -9,12 +9,16 @@ openai.api_key = OPENAI_API_KEY
 
 def embed_ticket_content(ticket):
     
-    text = f"Issue Key: {ticket['Issue Key']}\nSummary: {ticket['Summary']}\nDescription: {ticket['Description']}\nComments: {ticket['Comments']}"
+    try:
+        
+        text = f"Issue Key: {ticket['Issue Key']}\nSummary: {ticket['Summary']}\nDescription: {ticket['Description']}\nComments: {ticket['Comments']}"
+
+        response = openai.Embedding.create(
+            input=text,
+            model="text-embedding-ada-002" 
+        )
     
-    response = openai.Embedding.create(
-        input=text,
-        model="text-embedding-ada-002" 
-    )
-    
-    embedding = response['data'][0]['embedding']
-    return embedding
+        embedding = response['data'][0]['embedding']
+        return embedding
+    except Exception as e:
+        print(e)
