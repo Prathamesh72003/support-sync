@@ -273,7 +273,7 @@ export default function ProjectScreen() {
             <div className="flex justify-center items-center h-64">
               <div className="flex flex-col items-center gap-3">
                 <Loader2 className="w-12 h-12 animate-spin text-blue-400" />
-                <p className="text-blue-300 animate-pulse">Loading issues...</p>
+                <p className="text-blue-300 animate-pulse">Loading Tickets...</p>
               </div>
             </div>
           ) : error ? (
