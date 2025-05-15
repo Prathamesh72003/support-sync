@@ -1,8 +1,12 @@
 "use client";
 
 import type React from "react";
-
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import {
+  Card,
+  CardContent,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { ScrollArea } from "@/components/ui/scroll-area";
 import { useParams } from "react-router-dom";
@@ -32,15 +36,23 @@ import {
 } from "@/components/ui/select";
 
 type Priority = "High" | "Medium" | "Low";
+type Category =
+  | "Platform & Infrastructure Failures"
+  | "Automation & Communication Failures"
+  | "Configuration & Customization Errors"
+  | "Data & Integration Errors"
+  | "Access & Security Challenges";
 
 interface Issue {
-  issue_key: number;
+  issue_key: number | string;
   title: string;
   priority: Priority;
   description: string;
   createdAt: string;
-  assignedBy: string;
+  Assignee: string;
   projectKey: string;
+  issue_category?: Category;
+  issue_stats?: string | number;
 }
 
 const priorityColors = {
@@ -56,16 +68,22 @@ export default function ProjectScreen() {
   const [error, setError] = useState<string | null>(null);
   const [platform] = useState<"jira" | "clickup">("jira");
 
-  // New state for the ticket modal
   const [isDialogOpen, setIsDialogOpen] = useState(false);
+  const [submitLoading, setSubmitLoading] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
+
   const [newTicket, setNewTicket] = useState<{
     title: string;
     description: string;
     priority: Priority;
+    issue_category?: Category;
+    assigneeEmail?: string;
   }>({
     title: "",
     description: "",
     priority: "Medium",
+    issue_category: "Platform & Infrastructure Failures",
+    assigneeEmail: "",
   });
 
   useEffect(() => {
@@ -73,28 +91,28 @@ export default function ProjectScreen() {
       try {
         const endpoint =
           platform === "jira" ? "/tickets/open/jira" : "/tickets/open/clickup";
-        console.log(`Fetching from: ${endpoint}`);
         const response = await axios.post(`${API_BASE_URL_PROD}${endpoint}`, {
           project_key: projectKey,
         });
-        console.log(response.data);
 
-        const fetchedIssues =
-          response.data.open_tickets || response.data.open_tasks;
-        const issuesWithProjectKey = fetchedIssues.map((issue: Issue) => ({
-          ...issue,
-          projectKey: projectKey,
+        const fetchedIssues = response.data.open_tickets || response.data.open_tasks;
+
+        const issuesWithProjectKey: Issue[] = fetchedIssues.map((issue: any) => ({
+          issue_key: issue.issue_key,
+          title: issue.title,
+          priority: issue.priority,
+          description: issue.description,
+          createdAt: issue.DateTime || new Date().toISOString(),
+          Assignee: issue.Assignee || "Unassigned",
+          projectKey: projectKey || "",
+          issue_category: issue.issue_category || "Platform & Infrastructure Failures",
+          issue_stats: issue.issue_stats ?? "-",
         }));
 
         setIssues(issuesWithProjectKey);
       } catch (err) {
-        if (axios.isAxiosError(err)) {
-          setError(err.message || "Failed to fetch tickets.");
-        } else {
-          setError("Failed to fetch tickets.");
-        }
+        setError("Failed to fetch tickets.");
       } finally {
-        console.log("Loading finished");
         setLoading(false);
       }
     };
@@ -109,39 +127,90 @@ export default function ProjectScreen() {
     setNewTicket((prev) => ({ ...prev, [name]: value }));
   };
 
+  const handleCategoryChange = (value: string) => {
+    setNewTicket((prev) => ({ ...prev, issue_category: value as Category }));
+  };
+
   const handlePriorityChange = (value: string) => {
     setNewTicket((prev) => ({ ...prev, priority: value as Priority }));
   };
 
-  const handleSubmit = () => {
-    // Validate form
+  const handleSubmit = async () => {
+    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+
     if (!newTicket.title.trim() || !newTicket.description.trim()) {
-      alert("Please fill in all required fields");
+      setSubmitError("Please fill in all required fields.");
       return;
     }
 
-    // Create new ticket (frontend only)
-    const newIssue: Issue = {
-      issue_key: Date.now(), // Generate a temporary unique ID
-      title: newTicket.title,
-      description: newTicket.description,
-      priority: newTicket.priority,
-      createdAt: new Date().toISOString(),
-      assignedBy: "Current User", // You might want to get this from user context
-      projectKey: projectKey || "",
-    };
+    if (newTicket.assigneeEmail && !emailRegex.test(newTicket.assigneeEmail)) {
+      setSubmitError("Please enter a valid email address for the assignee.");
+      return;
+    }
 
-    // Add to the list
-    setIssues((prev) => [newIssue, ...prev]);
+    setSubmitLoading(true);
+    setSubmitError(null);
 
-    // Reset form and close dialog
-    setNewTicket({
-      title: "",
-      description: "",
-      priority: "Medium",
-    });
-    setIsDialogOpen(false);
+    try {
+      const resp = await axios.post(`${API_BASE_URL_PROD}/tickets/create/jira`, {
+        project_key: projectKey,
+        summary: newTicket.title,
+        description: newTicket.description,
+        level: newTicket.priority,
+        category_value: newTicket.issue_category,
+        assignee_email: newTicket.assigneeEmail,
+      });
+
+      const createdKey = resp.data.issue_key;
+      const now = new Date().toISOString();
+
+      const newIssue: Issue = {
+        issue_key: createdKey,
+        title: newTicket.title,
+        description: newTicket.description,
+        priority: newTicket.priority,
+        issue_category: newTicket.issue_category,
+        createdAt: now,
+        Assignee: newTicket.assigneeEmail || "Unassigned",
+        projectKey: projectKey || "",
+      };
+
+      setIssues((prev) => [newIssue, ...prev]);
+
+      // Reset form
+      setNewTicket({
+        title: "",
+        description: "",
+        priority: "Medium",
+        issue_category: "Platform & Infrastructure Failures",
+        assigneeEmail: "",
+      });
+
+      setIsDialogOpen(false);
+    } catch (err: any) {
+      setSubmitError(
+        axios.isAxiosError(err)
+          ? err.response?.data?.detail || err.message
+          : "Failed to create ticket."
+      );
+    } finally {
+      setSubmitLoading(false);
+    }
   };
+
+  const groupedIssues: Record<Category, Issue[]> = {
+    "Platform & Infrastructure Failures": [],
+    "Automation & Communication Failures": [],
+    "Configuration & Customization Errors": [],
+    "Data & Integration Errors": [],
+    "Access & Security Challenges": [],
+  };
+
+  issues.forEach((issue) => {
+    const category = issue.issue_category || "Platform & Infrastructure Failures";
+    if (!groupedIssues[category]) groupedIssues[category] = [];
+    groupedIssues[category].push(issue);
+  });
 
   return (
     <div className="min-h-screen bg-gradient-to-br from-[#001f3f] via-[#00172e] to-[#001030] text-white">
@@ -158,7 +227,7 @@ export default function ProjectScreen() {
           </Button>
         </div>
 
-        <ScrollArea className="h-[calc(100vh-12rem)]">
+        <ScrollArea className="h-[calc(100vh-12rem)] pr-2">
           {loading ? (
             <div className="flex justify-center items-center h-full">
               <Loader2 className="w-12 h-12 animate-spin text-white" />
@@ -166,57 +235,82 @@ export default function ProjectScreen() {
           ) : error ? (
             <div className="text-center text-red-500">{error}</div>
           ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-10">
-              {issues.map((issue) => (
-                <Link
-                  to={`/ticket/${issue.issue_key}`}
-                  state={{ issue }}
-                  key={issue.issue_key}
-                >
-                  <Card
-                    className={`border-l-4 ${
-                      issue.priority === "High"
-                        ? "border-red-500 bg-red-500/10"
-                        : issue.priority === "Medium"
-                        ? "border-yellow-500 bg-yellow-500/10"
-                        : "border-green-500 bg-green-500/10"
-                    } backdrop-filter backdrop-blur-lg hover:bg-opacity-20 transition-all duration-300`}
-                  >
-                    <CardHeader>
-                      <div className="flex justify-between items-start">
-                        <CardTitle className="text-xl font-semibold text-white">
-                          {issue.title}
-                        </CardTitle>
-                        <Badge
-                          className={`${
-                            priorityColors[issue.priority]
-                          } text-white`}
+            Object.entries(groupedIssues).map(
+              ([category, categoryIssues]) =>
+                categoryIssues.length > 0 && (
+                  <div key={category} className="mb-10">
+                    <h2 className="flex items-center text-2xl font-semibold mb-4 border-b-2 border-gray-600 pb-1">
+                      <span className="mr-2 text-xl select-none">
+                        {category === "Platform & Infrastructure Failures" && "🖥️"}
+                        {category === "Automation & Communication Failures" && "🤖"}
+                        {category === "Configuration & Customization Errors" && "⚙️"}
+                        {category === "Data & Integration Errors" && "🔗"}
+                        {category === "Access & Security Challenges" && "🔒"}
+                      </span>
+                      {category}
+                    </h2>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-8">
+                      {categoryIssues.map((issue) => (
+                        <Link
+                          to={`/ticket/${issue.issue_key}`}
+                          state={{ issue }}
+                          key={issue.issue_key}
                         >
-                          {issue.priority}
-                        </Badge>
-                      </div>
-                    </CardHeader>
-                    <CardContent>
-                      <p className="text-sm text-gray-300 mb-4">
-                        {issue.description}
-                      </p>
-                      <div className="flex justify-between items-center text-xs text-gray-400">
-                        <span>
-                          Created:{" "}
-                          {new Date(issue.createdAt).toLocaleDateString()}
-                        </span>
-                        <span>Assigned by: {issue.assignedBy}</span>
-                      </div>
-                    </CardContent>
-                  </Card>
-                </Link>
-              ))}
-            </div>
+                          <Card
+                            className={`h-[340px] flex flex-col justify-between border-l-4 ${
+                              issue.priority === "High"
+                                ? "border-red-500 bg-red-500/10"
+                                : issue.priority === "Medium"
+                                ? "border-yellow-500 bg-yellow-500/10"
+                                : "border-green-500 bg-green-500/10"
+                            } backdrop-filter backdrop-blur-lg hover:bg-opacity-20 transition-all duration-300`}
+                          >
+                            <CardHeader>
+                              <div className="flex justify-between items-start">
+                                <CardTitle className="text-xl font-semibold text-white line-clamp-2">
+                                  {issue.title}
+                                </CardTitle>
+                                <Badge
+                                  className={`${priorityColors[issue.priority]} text-white`}
+                                >
+                                  {issue.priority}
+                                </Badge>
+                              </div>
+                            </CardHeader>
+                            <CardContent className="flex flex-col justify-between flex-grow">
+                              <div>
+                                <p className="text-sm text-gray-300 mb-2 line-clamp-3">
+                                  {issue.description}
+                                </p>
+                                <p className="text-xs text-gray-400 mb-2 italic">
+                                  Category: {issue.issue_category}
+                                </p>
+                              </div>
+                              <div className="mt-auto">
+                                <div className="text-xs text-gray-400 italic mb-2">
+                                  Assignee: {issue.Assignee}
+                                </div>
+                                <div className="text-xs text-gray-400 italic mb-2">
+                                  Created: {new Date(issue.createdAt).toLocaleString()}
+                                </div>
+                                <div className="text-sm font-semibold text-blue-300 bg-blue-900/30 px-3 py-1 rounded-lg text-center">
+                                  No. of users faced this issue:{" "}
+                                  {issue.issue_stats ?? "-"}
+                                </div>
+                              </div>
+                            </CardContent>
+                          </Card>
+                        </Link>
+                      ))}
+                    </div>
+                  </div>
+                )
+            )
           )}
         </ScrollArea>
       </div>
 
-      {/* Ticket Creation Dialog */}
+      {/* Dialog */}
       <Dialog open={isDialogOpen} onOpenChange={setIsDialogOpen}>
         <DialogContent className="bg-[#001f3f] border-white border-opacity-20 text-white sm:max-w-[500px]">
           <DialogHeader>
@@ -239,6 +333,38 @@ export default function ProjectScreen() {
             </div>
 
             <div className="grid gap-2">
+              <Label htmlFor="assigneeEmail">Assignee Email</Label>
+              <Input
+                id="assigneeEmail"
+                name="assigneeEmail"
+                type="email"
+                value={newTicket.assigneeEmail}
+                onChange={handleInputChange}
+                placeholder="Enter assignee's email"
+                className="bg-white bg-opacity-10 border-white border-opacity-20"
+              />
+            </div>
+
+            <div className="grid gap-2">
+              <Label htmlFor="category">Category</Label>
+              <Select
+                value={newTicket.issue_category}
+                onValueChange={handleCategoryChange}
+              >
+                <SelectTrigger className="bg-white bg-opacity-10 border-white border-opacity-20">
+                  <SelectValue placeholder="Select category" />
+                </SelectTrigger>
+                <SelectContent className="bg-[#001f3f] border-white border-opacity-20 text-white">
+                  {Object.keys(groupedIssues).map((cat) => (
+                    <SelectItem key={cat} value={cat} className="text-white">
+                      {cat}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+
+            <div className="grid gap-2">
               <Label htmlFor="priority">Priority</Label>
               <Select
                 value={newTicket.priority}
@@ -247,10 +373,10 @@ export default function ProjectScreen() {
                 <SelectTrigger className="bg-white bg-opacity-10 border-white border-opacity-20">
                   <SelectValue placeholder="Select priority" />
                 </SelectTrigger>
-                <SelectContent className="bg-[#001f3f] border-white border-opacity-20">
-                  <SelectItem value="High">High</SelectItem>
-                  <SelectItem value="Medium">Medium</SelectItem>
-                  <SelectItem value="Low">Low</SelectItem>
+                <SelectContent className="bg-[#001f3f] border-white border-opacity-20 text-white">
+                  <SelectItem value="High" className="text-white">High</SelectItem>
+                  <SelectItem value="Medium" className="text-white">Medium</SelectItem>
+                  <SelectItem value="Low" className="text-white">Low</SelectItem>
                 </SelectContent>
               </Select>
             </div>
@@ -266,6 +392,10 @@ export default function ProjectScreen() {
                 className="bg-white bg-opacity-10 border-white border-opacity-20 min-h-[100px]"
               />
             </div>
+
+            {submitError && (
+              <p className="text-red-500 text-sm text-center">{submitError}</p>
+            )}
           </div>
 
           <DialogFooter>
@@ -279,7 +409,11 @@ export default function ProjectScreen() {
             <Button
               onClick={handleSubmit}
               className="bg-blue-600 hover:bg-blue-700 text-white"
+              disabled={submitLoading}
             >
+              {submitLoading ? (
+                <Loader2 className="w-4 h-4 mr-2 animate-spin" />
+              ) : null}
               Submit Ticket
             </Button>
           </DialogFooter>
