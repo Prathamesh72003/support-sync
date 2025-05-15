@@ -78,6 +78,7 @@ def format_tickets(tickets):
             'Priority': ticket['fields'].get('priority', {}).get('name', 'N/A'),
             'Category': ticket['fields']['customfield_10064'],
             'Stats': ticket['fields']['customfield_10065'],
+            'Level': ticket['fields']['customfield_10066'],
             'Time': ticket['fields']['statuscategorychangedate']
         })
     return formatted_tickets
@@ -94,6 +95,7 @@ def print_ticket_details(tickets):
         print(f"Priority: {ticket['Priority']}")
         print(f"Category: {ticket['Category']}")
         print(f"Stats: {ticket['Stats']}")
+        print(f"Level: {ticket['Level']}")
         print(f"Time: {ticket['Time']}")
         print("---------------------------------------------------")
 
