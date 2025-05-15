@@ -87,7 +87,11 @@ async def get_open_tickets(request: ProjectKeyRequest):
                 "description": ticket["Description"],
                 "priority": ticket["Priority"],
                 "platform": "JIRA",
-                "projectKey": request.project_key
+                "projectKey": request.project_key,
+                "issue_category": ticket["Category"],
+                "issue_stats": ticket["Stats"],
+                "Assignee": ticket["Assignee"],
+                "DateTime": ticket["Time"],
             }
             for ticket in open_tickets
         ]
